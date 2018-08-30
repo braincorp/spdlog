@@ -122,7 +122,7 @@ public:
         }
         for (size_t i = 0; i < threads_n; i++)
         {
-            threads_.emplace_back(std::bind(&thread_pool::worker_loop_, this));
+            threads_.emplace_back(&thread_pool::worker_loop_, this);
         }
     }
 
@@ -155,6 +155,11 @@ public:
     void post_flush(async_logger_ptr &&worker_ptr, async_overflow_policy overflow_policy)
     {
         post_async_msg_(async_msg(std::move(worker_ptr), async_msg_type::flush), overflow_policy);
+    }
+
+    size_t overrun_counter()
+    {
+        return q_.overrun_counter();
     }
 
 private:
