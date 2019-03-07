@@ -5,7 +5,10 @@
 
 #pragma once
 
+#ifndef SPDLOG_H
 #include "spdlog/spdlog.h"
+#endif
+
 #ifdef _WIN32
 #include "spdlog/sinks/wincolor_sink.h"
 #else
@@ -48,6 +51,6 @@ inline std::shared_ptr<logger> stderr_color_mt(const std::string &logger_name)
 template<typename Factory = default_factory>
 inline std::shared_ptr<logger> stderr_color_st(const std::string &logger_name)
 {
-    return Factory::template create<sinks::stderr_color_sink_mt>(logger_name);
+    return Factory::template create<sinks::stderr_color_sink_st>(logger_name);
 }
 } // namespace spdlog

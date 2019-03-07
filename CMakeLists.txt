@@ -4,8 +4,7 @@
 #
 
 cmake_minimum_required(VERSION 3.1)
-project(spdlog VERSION 1.1.0 LANGUAGES CXX)
-include(CTest)
+project(spdlog VERSION 1.3.1 LANGUAGES CXX)
 include(CMakeDependentOption)
 include(GNUInstallDirs)
 
@@ -31,7 +30,6 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCH
     add_compile_options("-Wconversion")
     add_compile_options("-pedantic")
     add_compile_options("-Wfatal-errors")
-    
 endif()
 
 #---------------------------------------------------------------------------------------
@@ -45,13 +43,21 @@ include(cmake/sanitizers.cmake)
 add_library(spdlog INTERFACE)
 add_library(spdlog::spdlog ALIAS spdlog)
 
-option(SPDLOG_BUILD_EXAMPLES "Build examples" ON)
-option(SPDLOG_BUILD_BENCH "Build benchmarks" ON)
+# Check if spdlog is being used directly or via add_subdirectory
+set(SPDLOG_MASTER_PROJECT OFF)
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(SPDLOG_MASTER_PROJECT ON)
+endif()
 
-cmake_dependent_option(SPDLOG_BUILD_TESTING
-    "Build spdlog tests" ON
-    "BUILD_TESTING" OFF
-)
+option(SPDLOG_BUILD_EXAMPLES "Build examples" ${SPDLOG_MASTER_PROJECT})
+option(SPDLOG_BUILD_BENCH "Build benchmarks (Requires https://github.com/google/benchmark.git to be installed)" OFF)
+option(SPDLOG_BUILD_TESTS "Build tests" ${SPDLOG_MASTER_PROJECT})
+option(SPDLOG_FMT_EXTERNAL "Use external fmt library instead of bundled" OFF)
+option(SPDLOG_INSTALL "Generate the install target." ${SPDLOG_MASTER_PROJECT})
+
+if(SPDLOG_FMT_EXTERNAL AND NOT TARGET fmt::fmt)
+    find_package(fmt REQUIRED CONFIG)
+endif()
 
 target_include_directories(
     spdlog
@@ -60,13 +66,19 @@ target_include_directories(
     "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
 
+if(SPDLOG_FMT_EXTERNAL)
+    target_compile_definitions(spdlog INTERFACE SPDLOG_FMT_EXTERNAL)
+    target_link_libraries(spdlog INTERFACE fmt::fmt)
+endif()
+
 set(HEADER_BASE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 if(SPDLOG_BUILD_EXAMPLES)
     add_subdirectory(example)
 endif()
 
-if(SPDLOG_BUILD_TESTING)
+if(SPDLOG_BUILD_TESTS)
+    include(CTest)
     add_subdirectory(tests)
 endif()
 
@@ -77,66 +89,72 @@ endif()
 #---------------------------------------------------------------------------------------
 # Install/export targets and files
 #---------------------------------------------------------------------------------------
-# set files and directories
-set(config_install_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
-set(include_install_dir "${CMAKE_INSTALL_INCLUDEDIR}")
-set(pkgconfig_install_dir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-set(version_config "${CMAKE_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
-set(project_config "${PROJECT_NAME}Config.cmake")
-set(pkg_config "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc")
-set(targets_export_name "${PROJECT_NAME}Targets")
-set(namespace "${PROJECT_NAME}::")
+if(SPDLOG_INSTALL)
+    # set files and directories
+    set(config_install_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
+    set(include_install_dir "${CMAKE_INSTALL_INCLUDEDIR}")
+    set(pkgconfig_install_dir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+    set(version_config "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
+    set(project_config "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake")
+    set(targets_config "${PROJECT_NAME}Targets.cmake")
+    set(pkg_config "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.pc")
+    set(targets_export_name "${PROJECT_NAME}Targets")
+    set(namespace "${PROJECT_NAME}::")
 
-# generate package version file
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-    "${version_config}" COMPATIBILITY SameMajorVersion
-)
+    # generate package version file
+    include(CMakePackageConfigHelpers)
+    write_basic_package_version_file(
+        "${version_config}" COMPATIBILITY SameMajorVersion
+    )
 
-# configure pkg config file
-configure_file("cmake/spdlog.pc.in" "${pkg_config}" @ONLY)
+    # configure pkg config file
+    configure_file("cmake/spdlog.pc.in" "${pkg_config}" @ONLY)
+    # configure spdlogConfig.cmake file
+    configure_file("cmake/Config.cmake.in" "${project_config}" @ONLY)
 
-# install targets
-install(
-    TARGETS spdlog
-    EXPORT "${targets_export_name}"
-)
+    # install targets
+    install(
+        TARGETS spdlog
+        EXPORT "${targets_export_name}"
+    )
 
-# install headers
-install(
-    DIRECTORY "${HEADER_BASE}/${PROJECT_NAME}"
-    DESTINATION "${include_install_dir}"
-)
+    # install headers
+    install(
+        DIRECTORY "${HEADER_BASE}/${PROJECT_NAME}"
+        DESTINATION "${include_install_dir}"
+    )
 
-# install project version file
-install(
-    FILES "${version_config}"
-    DESTINATION "${config_install_dir}"
-)
+    # install project config and version file
+    install(
+        FILES "${project_config}" "${version_config}"
+        DESTINATION "${config_install_dir}"
+    )
 
-# install pkg config file
-install(
-    FILES "${pkg_config}"
-    DESTINATION "${pkgconfig_install_dir}"
-)
+    # install pkg config file
+    install(
+        FILES "${pkg_config}"
+        DESTINATION "${pkgconfig_install_dir}"
+    )
 
-# install project config file
-install(
-    EXPORT "${targets_export_name}"
-    NAMESPACE "${namespace}"
-    DESTINATION "${config_install_dir}"
-    FILE ${project_config}
-)
+    # install targets config file
+    install(
+        EXPORT "${targets_export_name}"
+        NAMESPACE "${namespace}"
+        DESTINATION "${config_install_dir}"
+        FILE ${targets_config}
+    )
 
-# export build directory config file
+# export build directory targets file
 export(
     EXPORT ${targets_export_name}
     NAMESPACE "${namespace}"
-    FILE ${project_config}
+    FILE ${targets_config}
 )
 
 # register project in CMake user registry
 export(PACKAGE ${PROJECT_NAME})
+
+endif()
 
 file(GLOB_RECURSE spdlog_include_SRCS "${HEADER_BASE}/*.h")
 add_custom_target(spdlog_headers_for_ide SOURCES ${spdlog_include_SRCS})
