@@ -624,7 +624,7 @@ class z_formatter final : public flag_formatter
 {
 public:
     explicit z_formatter(padding_info padinfo)
-        : flag_formatter(padinfo){};
+        : flag_formatter(padinfo), last_update_(std::chrono::seconds(0)) {};
 
     const std::chrono::seconds cache_refresh = std::chrono::seconds(5);
 
@@ -662,7 +662,7 @@ public:
     }
 
 private:
-    log_clock::time_point last_update_{std::chrono::seconds(0)};
+    log_clock::time_point last_update_;
 #ifdef _WIN32
     int offset_minutes_{0};
 
